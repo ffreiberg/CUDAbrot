@@ -92,39 +92,33 @@ int main(void){
 ****************************************************************************************************/
 
 void callKernel(int** img, double xx, double yy, int zoom){
-	int* d_image_buffer;
-#ifdef _WIN32
-	SYSTEMTIME start, end;
-	int diff;
-#elif __linux __ || __unix || __APPLE__
-#endif
-	cudaAssertSuccess(cudaMalloc(&d_image_buffer, IMGWIDTH * IMGHEIGHT*sizeof(int)));
-	dim3 block_size(THREADSX, THREADSY);
-	dim3 grid_size((IMGWIDTH + block_size.x - 1)/ block_size.x, (IMGHEIGHT + block_size.y - 1)/ block_size.y);
+	int* dImageBuffer;
+	cudaEvent_t start, stop;
+	float diff = 0;
+	cudaAssertSuccess(cudaEventCreate(&start));
+	cudaAssertSuccess(cudaEventCreate(&stop));
 
-#ifdef _WIN32
-	GetSystemTime(&start);
-#elif __linux __ || __unix || __APPLE__
-#endif
+	cudaAssertSuccess(cudaMalloc(&dImageBuffer, IMGWIDTH * IMGHEIGHT*sizeof(int)));
+	dim3 blockSize(THREADSX, THREADSY);
+	dim3 gridSize((IMGWIDTH + blockSize.x - 1)/ blockSize.x, (IMGHEIGHT + blockSize.y - 1)/ blockSize.y);
+
+	cudaAssertSuccess(cudaEventRecord(start));
 
 #if MANDELBROT
-	mandelbrotKernel<<<grid_size, block_size>>>(d_image_buffer, xx, yy, zoom);
+	mandelbrotKernel<<<gridSize, blockSize>>>(dImageBuffer, xx, yy, zoom);
 #elif JULIASET
-	juliaKernel<<<grid_size, block_size>>>(d_image_buffer, xx, yy, zoom);
+	juliaKernel<<<gridSize, blockSize>>>(dImageBuffer, xx, yy, zoom);
 #endif
-	cudaAssertSuccess(cudaDeviceSynchronize());
-
-#ifdef _WIN32
-	GetSystemTime(&end);
-	diff = ((end.wSecond * 1000) + end.wMilliseconds) - ((start.wSecond * 1000) + start.wMilliseconds);
-	cout << "Zoom factor " << zoom << ".0x" << endl;
-	cout << "Calculation took " << diff << "ms on GPU" << endl;
-#elif __linux __ || __unix || __APPLE__
-#endif
+	//cudaAssertSuccess(cudaDeviceSynchronize());
+	cudaAssertSuccess(cudaEventRecord(stop));
 	cudaAssertSuccess(cudaPeekAtLastError());
 	cudaAssertSuccess(cudaDeviceSynchronize());
-	cudaAssertSuccess(cudaMemcpy(*img, d_image_buffer, IMGHEIGHT * IMGWIDTH*(sizeof(int)), cudaMemcpyDeviceToHost));
-	cudaAssertSuccess(cudaFree(d_image_buffer));
+	cudaAssertSuccess(cudaMemcpy(*img, dImageBuffer, IMGHEIGHT * IMGWIDTH*(sizeof(int)), cudaMemcpyDeviceToHost));
+	cudaAssertSuccess(cudaEventSynchronize(stop));
+	cudaEventElapsedTime(&diff, start, stop);
+	cout << "Zoom factor " << zoom << ".0x" << endl;
+	cout << "Calculation took " << diff << "ms on GPU" << endl;
+	cudaAssertSuccess(cudaFree(dImageBuffer));
 }
 
 #pragma region mandelbrot
@@ -164,7 +158,7 @@ __global__ void mandelbrotKernel(int* imageBuffer, double xx, double yy, int zoo
 	double zReNew;
 	
 	/*  */
-	while ((zRe * zRe + zIm * zIm <= ESCAPE) && (iter < MAX_ITER))
+	while ((zRe * zRe + zIm * zIm <= ESCAPE) && (iter < MAXITER))
 	{
 		zReNew = zRe * zRe - zIm * zIm + cRe;
 		zIm = 2.0 * zRe * zIm + cIm;
@@ -191,7 +185,7 @@ void mandelbrot(cv::Mat &imgBuffer, double xx, double yy, int zoom){
 			double zReNew;
 
 			/*  */
-			while ((zRe * zRe + zIm * zIm <= ESCAPE) && (iter < MAX_ITER))
+			while ((zRe * zRe + zIm * zIm <= ESCAPE) && (iter < MAXITER))
 			{
 				zReNew = zRe * zRe - zIm * zIm + cRe;
 				zIm = 2.0 * zRe * zIm + cIm;
@@ -242,7 +236,7 @@ __global__ void juliaKernel(int* imageBuffer, double xx, double yy, int zoom) {
 	int iter = 0;
 	double zReNew;
 
-	while ((zRe * zRe + zIm * zIm <= ESCAPE) && (iter < MAX_ITER))
+	while ((zRe * zRe + zIm * zIm <= ESCAPE) && (iter < MAXITER))
 	{
 		zReNew = zRe * zRe - zIm * zIm + cRe;
 		zIm = 2.0 * zRe * zIm + cIm;
@@ -267,7 +261,7 @@ void julia(cv::Mat& imgBuffer, double xx, double yy, int zoom) {
 			int iter = 0;
 			double zReNew;
 
-			while ((zRe * zRe + zIm * zIm <= ESCAPE) && (iter < MAX_ITER))
+			while ((zRe * zRe + zIm * zIm <= ESCAPE) && (iter < MAXITER))
 			{
 				zReNew = zRe * zRe - zIm * zIm + cRe;
 				zIm = 2.0 * zRe * zIm + cIm;
@@ -290,7 +284,7 @@ void julia(cv::Mat& imgBuffer, double xx, double yy, int zoom) {
 
 cv::Vec3b colorizeBernstein(int val){
 
-	double t = (double)val / (double)MAX_ITER;
+	double t = (double)val / (double)MAXITER;
 
 	// Use smooth polynomials for r, g, b
 	int r = (int)(9 * (1 - t)*t*t*t * 255);
@@ -303,7 +297,7 @@ cv::Vec3b colorizeEsoteric(int val){
 	int N = 256; // colors per element
 	int N3 = N * N * N;
 	// map n on the 0..1 interval (real numbers)
-	double t = (double)val / (double)MAX_ITER;
+	double t = (double)val / (double)MAXITER;
 	// expand n on the 0 .. 256^3 interval (integers)
 	val = (int)(t * (double)N3);
 

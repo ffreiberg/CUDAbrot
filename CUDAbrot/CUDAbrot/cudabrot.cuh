@@ -15,7 +15,7 @@
 
 #define IMGHEIGHT	1000			//image height
 #define IMGWIDTH	1000			//image width
-#define MAX_ITER	1000			//maximum number of iterations
+#define MAXITER		1000			//maximum number of iterations
 #define ESCAPE		4.0				//escape value
 #define THREADSX	16				//number of threads/block in x-direction
 #define THREADSY	16				//number of threads/block in y direction
